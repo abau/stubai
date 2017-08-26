@@ -6,7 +6,7 @@ import argparse
 import os.path
 import sys
 
-parser = argparse.ArgumentParser (description = "Make MapQuest maps from GPX files")
+parser = argparse.ArgumentParser (description = "Plot GPX tracks using MapQuest's OpenStreetMap API")
 parser.add_argument ("--output", metavar = "FILE", type = str, default = "", help = "Output file")
 parser.add_argument ("--width", metavar = "WIDTH", type = int, default = 1920, help = "Width of the resulting image")
 parser.add_argument ("--height", metavar = "HEIGHT", type = int, default = 1920, help = "Height of the resulting image")
