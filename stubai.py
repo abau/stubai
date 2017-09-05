@@ -14,12 +14,17 @@ parser.add_argument ("--zoom", metavar = "N", type = int, default = None, help =
 parser.add_argument ("--skip-lead", metavar = "N", type = int, default = 0, help = "Skip N leading track points")
 parser.add_argument ("--skip-trail", metavar = "N", type = int, default = 0, help = "Skip N trailing track points")
 parser.add_argument ("--include-every", metavar = "N", type = int, default = 1, help = "Include every N-th trailing track point only")
+parser.add_argument ("--waypoints", metavar = "FILE", type = str, default = "", help = "GPX file containing waypoints")
+parser.add_argument ("--start-waypoint", action = "store_true", help = "Add start waypoint")
+parser.add_argument ("--end-waypoint", action = "store_true", help = "Add end waypoint")
 parser.add_argument ("--print-url", action = "store_true", help = "Print requested URL")
 parser.add_argument ("key", metavar = "KEY", help = "MapQuest API key")
 parser.add_argument ("file", metavar = "FILE", help = "GPX file")
 
-class LatLonHandler (xml.sax.ContentHandler):
+class TrackpointParser (xml.sax.ContentHandler):
     def __init__ (self):
+        self.startLocation = (0,0)
+        self.endLocation = (0,0)
         self.encodedLocations = []
         self.numLocations = 0
         self.latestLat = 0
@@ -40,8 +45,8 @@ class LatLonHandler (xml.sax.ContentHandler):
         rLat = int (round (lat * pow (10, 5)))
         rLon = int (round (lon * pow (10, 5)))
 
-        encLat = LatLonHandler.encode (rLat - self.latestLat)
-        encLon = LatLonHandler.encode (rLon - self.latestLon)
+        encLat = TrackpointParser.encode (rLat - self.latestLat)
+        encLon = TrackpointParser.encode (rLon - self.latestLon)
 
         self.encodedLocations.append (encLat + encLon)
 
@@ -57,19 +62,33 @@ class LatLonHandler (xml.sax.ContentHandler):
                 lat = float (attrs.getValue ("lat"))
                 lon = float (attrs.getValue ("lon"))
 
+                if len (self.encodedLocations) == 0:
+                    self.startLocation = (lat, lon)
+                self.endLocation = (lat, lon)
+
                 self.addEncodedLatLon (lat, lon)
 
             self.numLocations += 1
+
+class WaypointParser (xml.sax.ContentHandler):
+    def __init__ (self):
+        self.waypoints = ""
+
+    def startElement (self, name, attrs):
+        if name == "wpt":
+            lat = float (attrs.getValue ("lat"))
+            lon = float (attrs.getValue ("lon"))
+            self.waypoints += "{},{}|marker-lg||".format (lat, lon)
     
 if __name__ == "__main__":
     args = parser.parse_args ()
-    parser = LatLonHandler ()
-    xml.sax.parse (args.file, parser)
+    tpParser = TrackpointParser ()
+    xml.sax.parse (args.file, tpParser)
 
     if args.skip_trail > 0:
-        parser.encodedLocations = parser.encodedLocations[0:-args.skip_trail]
+        tpParser.encodedLocations = tpParser.encodedLocations[0:-args.skip_trail]
 
-    locations = "".join (parser.encodedLocations)
+    locations = "".join (tpParser.encodedLocations)
     url = ("https://www.mapquestapi.com/staticmap/v5/map"
            "?size={},{}"
            "&key={}"
@@ -78,6 +97,25 @@ if __name__ == "__main__":
 
     if args.zoom:
         url += "&zoom={}".format (args.zoom)
+
+    locationsFlag = False
+    if args.waypoints:
+        wpParser = WaypointParser ()
+        xml.sax.parse (args.waypoints, wpParser)
+        url += "&locations=" + wpParser.waypoints
+        locationsFlag = True
+
+    if args.start_waypoint:
+        if not locationsFlag:
+            url += "&locations="
+            locationsFlag = True
+        url += "{},{}|marker-start||".format (*tpParser.startLocation)
+
+    if args.end_waypoint:
+        if not locationsFlag:
+            url += "&locations="
+            locationsFlag = True
+        url += "{},{}|marker-end||".format (*tpParser.endLocation)
 
     if args.print_url:
         print (url)
